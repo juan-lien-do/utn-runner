@@ -1,0 +1,82 @@
+"use client"
+
+import { Canvas } from "@react-three/fiber"
+import Player from "./Player"
+import UIOverlay from "./UIOverlay"
+import { Suspense, useState, useEffect } from "react"
+import { GAME_CONFIG, updateGameDifficulty } from "./config"
+
+export default function GameScene() {
+  const [isGameOver, setIsGameOver] = useState(false)
+  const [score, setScore] = useState(0)
+  const [isPaused, setIsPaused] = useState(false)
+  const [finalScore, setFinalScore] = useState(0)
+
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isGameOver) {
+        setIsPaused((prev) => !prev)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyPress)
+    return () => window.removeEventListener("keydown", handleKeyPress)
+  }, [isGameOver])
+
+  const handleGameOver = () => {
+    setFinalScore(score)
+    setIsGameOver(true)
+  }
+
+  const handleRestart = () => {
+    setIsGameOver(false)
+    setScore(0)
+    setFinalScore(0)
+    setIsPaused(false)
+    GAME_CONFIG.playerSpeed = 0.3
+    GAME_CONFIG.jump.duration = 0.9
+    GAME_CONFIG.obstacles.spawnInterval = 1.0
+    window.location.reload()
+  }
+
+  useEffect(() => {
+    if (!isGameOver && !isPaused) {
+      updateGameDifficulty(score)
+    }
+  }, [score, isGameOver, isPaused])
+
+  return (
+    <div className="w-full h-full relative">
+      <Canvas camera={{ position: [0, 5, -10], fov: 75 }} className="w-full h-full" shadows>
+        <Suspense fallback={null}>
+          {/* Lighting */}
+          <ambientLight intensity={1.2} />
+          <directionalLight
+            position={[10, 10, 5]}
+            intensity={0}
+            color="#4444ff"
+            castShadow
+            shadow-mapSize-width={1024}
+            shadow-mapSize-height={1024}
+            shadow-camera-far={50}
+            shadow-camera-left={-20}
+            shadow-camera-right={20}
+            shadow-camera-top={20}
+            shadow-camera-bottom={-20}
+          />
+
+          {/* Player */}
+          <Player onGameOver={handleGameOver} isGameOver={isGameOver} isPaused={isPaused} onScoreUpdate={setScore} />
+        </Suspense>
+      </Canvas>
+
+      <UIOverlay
+        score={score}
+        isGameOver={isGameOver}
+        isPaused={isPaused}
+        finalScore={finalScore}
+        onRestart={handleRestart}
+      />
+    </div>
+  )
+}

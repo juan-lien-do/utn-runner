@@ -1,0 +1,451 @@
+"use client"
+
+import { useRef, useEffect, useState } from "react"
+import { useFrame, useThree } from "@react-three/fiber"
+import type { Mesh, Group, SpotLight } from "three"
+import * as THREE from "three"
+import { GAME_CONFIG } from "./config"
+import Terrain from "./Terrain"
+import Obstacles from "./Obstacles"
+import { useHandControlContext } from "../vision/HandControlContext"
+
+type Lane = "left" | "center" | "right"
+
+interface Obstacle {
+  id: number
+  x: number
+  z: number
+  lane: Lane
+}
+
+interface Mate {
+  id: number
+  x: number
+  z: number
+  lane: Lane
+}
+
+interface TerrainSegment {
+  id: number
+  z: number
+}
+
+interface TunnelLight {
+  id: number
+  z: number
+}
+
+interface WallImage {
+  id: number
+  z: number
+}
+
+interface PlayerProps {
+  onGameOver: () => void
+  isGameOver: boolean
+  isPaused: boolean
+  onScoreUpdate: (score: number) => void
+}
+
+export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate }: PlayerProps) {
+  const meshRef = useRef<Mesh>(null)
+  const terrainRef = useRef<Group>(null)
+  const { camera } = useThree()
+
+  // Player state
+  const [currentLane, setCurrentLane] = useState<Lane>("center")
+  const [targetX, setTargetX] = useState(GAME_CONFIG.lanes.center)
+  const [positionZ, setPositionZ] = useState(0)
+
+  const [obstacles, setObstacles] = useState<Obstacle[]>([])
+  const [lastObstacleSpawn, setLastObstacleSpawn] = useState(0)
+  const obstacleIdCounter = useRef(0)
+
+  const [mates, setMates] = useState<Mate[]>([])
+  const mateIdCounter = useRef(0)
+
+  const [isInvulnerable, setIsInvulnerable] = useState(false)
+  const [invulnerabilityEndTime, setInvulnerabilityEndTime] = useState(0)
+  const [pausedInvulnerabilityTime, setPausedInvulnerabilityTime] = useState(0)
+
+  const [isJumping, setIsJumping] = useState(false)
+  const [jumpStartTime, setJumpStartTime] = useState(0)
+  const [currentY, setCurrentY] = useState(0)
+
+  const [gameStartTime] = useState(Date.now())
+  const [totalDistance, setTotalDistance] = useState(0)
+  const spotLightRef = useRef<SpotLight>(null)
+
+  const [terrainSegments, setTerrainSegments] = useState<TerrainSegment[]>(() => {
+    const initialSegments: TerrainSegment[] = []
+    const totalSegments = GAME_CONFIG.terrain.segmentsAhead + GAME_CONFIG.terrain.segmentsBehind + 1
+
+    for (let i = 0; i < totalSegments; i++) {
+      initialSegments.push({
+        id: i,
+        z: (i - GAME_CONFIG.terrain.segmentsBehind) * GAME_CONFIG.terrain.segmentSize,
+      })
+    }
+    return initialSegments
+  })
+
+  const [tunnelLights, setTunnelLights] = useState<TunnelLight[]>(() => {
+    const initialLights: TunnelLight[] = []
+    const totalSegments = GAME_CONFIG.terrain.segmentsAhead + GAME_CONFIG.terrain.segmentsBehind + 1
+
+    for (let i = 0; i < totalSegments; i++) {
+      initialLights.push({
+        id: i,
+        z: (i - GAME_CONFIG.terrain.segmentsBehind) * GAME_CONFIG.terrain.segmentSize,
+      })
+    }
+    return initialLights
+  })
+
+  const [wallImages, setWallImages] = useState<WallImage[]>([])
+  const [lastWallImageSpawn, setLastWallImageSpawn] = useState(0)
+  const wallImageIdCounter = useRef(0)
+
+  const terrainIdCounter = useRef(GAME_CONFIG.terrain.segmentsAhead + GAME_CONFIG.terrain.segmentsBehind + 1)
+  const lightIdCounter = useRef(GAME_CONFIG.terrain.segmentsAhead + GAME_CONFIG.terrain.segmentsBehind + 1)
+
+  const { lane: handLane, jump: handJump } = useHandControlContext()
+  const [keyboardActive, setKeyboardActive] = useState(false)
+  const keyboardTimeoutRef = useRef<NodeJS.Timeout>()
+
+  // Handle keyboard input
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (isGameOver || isPaused) return
+
+      setKeyboardActive(true)
+      if (keyboardTimeoutRef.current) {
+        clearTimeout(keyboardTimeoutRef.current)
+      }
+      keyboardTimeoutRef.current = setTimeout(() => {
+        setKeyboardActive(false)
+      }, 1000)
+
+      switch (event.key) {
+        case "ArrowRight":
+          if (currentLane === "center") {
+            setCurrentLane("left")
+            setTargetX(GAME_CONFIG.lanes.left)
+          } else if (currentLane === "right") {
+            setCurrentLane("center")
+            setTargetX(GAME_CONFIG.lanes.center)
+          }
+          break
+        case "ArrowLeft":
+          if (currentLane === "center") {
+            setCurrentLane("right")
+            setTargetX(GAME_CONFIG.lanes.right)
+          } else if (currentLane === "left") {
+            setCurrentLane("center")
+            setTargetX(GAME_CONFIG.lanes.center)
+          }
+          break
+        case "ArrowUp":
+          if (!isJumping) {
+            setIsJumping(true)
+            setJumpStartTime(Date.now())
+          }
+          break
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyPress)
+    return () => {
+      window.removeEventListener("keydown", handleKeyPress)
+      if (keyboardTimeoutRef.current) {
+        clearTimeout(keyboardTimeoutRef.current)
+      }
+    }
+  }, [currentLane, isJumping, isGameOver, isPaused])
+
+  useEffect(() => {
+    if (isGameOver || isPaused || keyboardActive) return
+
+    // Apply hand lane control
+    if (handLane && handLane !== currentLane) {
+      setCurrentLane(handLane)
+      setTargetX(GAME_CONFIG.lanes[handLane])
+    }
+  }, [handLane, currentLane, isGameOver, isPaused, keyboardActive])
+
+  useEffect(() => {
+    if (isGameOver || isPaused || keyboardActive) return
+
+    if (handJump && !isJumping) {
+      setIsJumping(true)
+      setJumpStartTime(Date.now())
+    }
+  }, [handJump, isJumping, isGameOver, isPaused, keyboardActive])
+
+  useEffect(() => {
+    if (isGameOver || isPaused) return
+
+    const timeElapsed = (Date.now() - gameStartTime) / 1000
+    const timeScore = timeElapsed * GAME_CONFIG.scoring.pointsPerSecond
+    const distanceScore = totalDistance * GAME_CONFIG.scoring.distanceMultiplier
+    const currentScore = timeScore + distanceScore
+
+    onScoreUpdate(currentScore)
+  }, [totalDistance, isGameOver, isPaused, gameStartTime, onScoreUpdate])
+
+  useEffect(() => {
+    if (isGameOver || isPaused) return
+
+    const checkInvulnerability = () => {
+      if (isInvulnerable && Date.now() >= invulnerabilityEndTime) {
+        setIsInvulnerable(false)
+        setInvulnerabilityEndTime(0)
+      }
+    }
+
+    const interval = setInterval(checkInvulnerability, 100)
+    return () => clearInterval(interval)
+  }, [isInvulnerable, invulnerabilityEndTime, isGameOver, isPaused])
+
+  useEffect(() => {
+    if (isPaused && isInvulnerable) {
+      setPausedInvulnerabilityTime(invulnerabilityEndTime - Date.now())
+    } else if (!isPaused && isInvulnerable && pausedInvulnerabilityTime > 0) {
+      setInvulnerabilityEndTime(Date.now() + pausedInvulnerabilityTime)
+      setPausedInvulnerabilityTime(0)
+    }
+  }, [isPaused, isInvulnerable, invulnerabilityEndTime, pausedInvulnerabilityTime])
+
+  const checkCollisions = (playerX: number, playerY: number, playerZ: number) => {
+    const playerBox = new THREE.Box3().setFromCenterAndSize(
+      new THREE.Vector3(playerX, playerY, playerZ),
+      new THREE.Vector3(0.8, 0.8, 0.8),
+    )
+
+    for (const mate of mates) {
+      const mateBox = new THREE.Box3().setFromCenterAndSize(
+        new THREE.Vector3(mate.x, GAME_CONFIG.mate.height, mate.z),
+        new THREE.Vector3(GAME_CONFIG.mate.size, GAME_CONFIG.mate.size, GAME_CONFIG.mate.size),
+      )
+
+      if (playerBox.intersectsBox(mateBox)) {
+        collectMate(mate.id)
+        return false
+      }
+    }
+
+    if (!isInvulnerable) {
+      for (const obstacle of obstacles) {
+        const obstacleBox = new THREE.Box3().setFromCenterAndSize(
+          new THREE.Vector3(obstacle.x, GAME_CONFIG.obstacles.size[1] / 2 - 1, obstacle.z),
+          new THREE.Vector3(...GAME_CONFIG.obstacles.size),
+        )
+
+        if (playerBox.intersectsBox(obstacleBox)) {
+          return true
+        }
+      }
+    }
+
+    return false
+  }
+
+  const collectMate = (mateId: number) => {
+    setMates((prev) => prev.filter((mate) => mate.id !== mateId))
+
+    setIsInvulnerable(true)
+    setInvulnerabilityEndTime(Date.now() + GAME_CONFIG.mate.invulnerabilityDuration)
+    setPausedInvulnerabilityTime(0)
+  }
+
+  const spawnObstacle = (currentZ: number) => {
+    const lanes: Lane[] = ["left", "center", "right"]
+    const randomLane = lanes[Math.floor(Math.random() * lanes.length)]
+    const laneX = GAME_CONFIG.lanes[randomLane]
+
+    const newObstacle: Obstacle = {
+      id: obstacleIdCounter.current++,
+      x: laneX,
+      z: currentZ + GAME_CONFIG.obstacles.spawnDistance,
+      lane: randomLane,
+    }
+
+    setObstacles((prev) => [...prev, newObstacle])
+
+    if (Math.random() < GAME_CONFIG.mate.spawnChance) {
+      const newMate: Mate = {
+        id: mateIdCounter.current++,
+        x: laneX,
+        z: currentZ + GAME_CONFIG.obstacles.spawnDistance,
+        lane: randomLane,
+      }
+
+      setMates((prev) => [...prev, newMate])
+    }
+  }
+
+  const spawnWallImage = (currentZ: number) => {
+    const newWallImage: WallImage = {
+      id: wallImageIdCounter.current++,
+      z: currentZ + 30,
+    }
+
+    setWallImages((prev) => [...prev, newWallImage])
+  }
+
+  const updateTerrain = (playerZ: number) => {
+    setTerrainSegments((prevSegments) => {
+      const updatedSegments = [...prevSegments]
+
+      const minZ = playerZ - GAME_CONFIG.terrain.segmentsBehind * GAME_CONFIG.terrain.segmentSize
+      const maxZ = playerZ + GAME_CONFIG.terrain.segmentsAhead * GAME_CONFIG.terrain.segmentSize
+
+      const filteredSegments = updatedSegments.filter(
+        (segment) => segment.z >= minZ - GAME_CONFIG.terrain.recycleDistance,
+      )
+
+      const existingZPositions = new Set(filteredSegments.map((s) => s.z))
+
+      for (let z = minZ; z <= maxZ; z += GAME_CONFIG.terrain.segmentSize) {
+        const roundedZ = Math.round(z / GAME_CONFIG.terrain.segmentSize) * GAME_CONFIG.terrain.segmentSize
+
+        if (!existingZPositions.has(roundedZ)) {
+          filteredSegments.push({
+            id: terrainIdCounter.current++,
+            z: roundedZ,
+          })
+        }
+      }
+
+      return filteredSegments.sort((a, b) => a.z - b.z)
+    })
+  }
+
+  const updateTunnelLights = (playerZ: number) => {
+    setTunnelLights((prevLights) => {
+      const updatedLights: TunnelLight[] = []
+
+      const minZ = playerZ - GAME_CONFIG.terrain.segmentsBehind * GAME_CONFIG.terrain.segmentSize
+      const maxZ = playerZ + GAME_CONFIG.terrain.segmentsAhead * GAME_CONFIG.terrain.segmentSize
+
+      for (let z = minZ; z <= maxZ; z += GAME_CONFIG.terrain.segmentSize) {
+        const segmentIndex = Math.round(z / GAME_CONFIG.terrain.segmentSize)
+        if (segmentIndex % 3 === 0) {
+          updatedLights.push({
+            id: lightIdCounter.current++,
+            z: Math.round(z / GAME_CONFIG.terrain.segmentSize) * GAME_CONFIG.terrain.segmentSize,
+          })
+        }
+      }
+
+      return updatedLights
+    })
+  }
+
+  useFrame((state, delta) => {
+    if (!meshRef.current || isGameOver || isPaused) return
+
+    const newZ = positionZ + GAME_CONFIG.playerSpeed
+    setPositionZ(newZ)
+    setTotalDistance(newZ)
+    meshRef.current.position.z = newZ
+
+    updateTerrain(newZ)
+    updateTunnelLights(newZ)
+
+    const currentX = meshRef.current.position.x
+    const lerpSpeed = 8 * delta
+    const newX = currentX + (targetX - currentX) * lerpSpeed
+    meshRef.current.position.x = newX
+
+    if (isJumping) {
+      const elapsed = (Date.now() - jumpStartTime) / 1000
+      const progress = elapsed / GAME_CONFIG.jump.duration
+
+      if (progress >= 1) {
+        setIsJumping(false)
+        setCurrentY(0)
+        meshRef.current.position.y = 0
+      } else {
+        const jumpY = Math.sin(progress * Math.PI) * GAME_CONFIG.jump.height
+        setCurrentY(jumpY)
+        meshRef.current.position.y = jumpY
+      }
+    }
+
+    const currentTime = Date.now() / 1000
+
+    if (spotLightRef.current) {
+      spotLightRef.current.position.set(newX, 5, newZ - 5)
+      spotLightRef.current.target.position.set(newX, 0, newZ + 10)
+      spotLightRef.current.target.updateMatrixWorld()
+    }
+
+    if (currentTime - lastObstacleSpawn > GAME_CONFIG.obstacles.spawnInterval) {
+      spawnObstacle(newZ)
+      setLastObstacleSpawn(currentTime)
+    }
+
+    if (currentTime - lastWallImageSpawn > 3.5) {
+      spawnWallImage(newZ)
+      setLastWallImageSpawn(currentTime)
+    }
+
+    setObstacles((prev) => prev.filter((obstacle) => obstacle.z > newZ - 20))
+    setMates((prev) => prev.filter((mate) => mate.z > newZ - 20))
+    setWallImages((prev) => prev.filter((image) => image.z > newZ - 20))
+
+    if (checkCollisions(newX, currentY, newZ)) {
+      onGameOver()
+      return
+    }
+
+    camera.position.x = newX
+    camera.position.y = 5
+    camera.position.z = newZ - 10
+
+    camera.lookAt(newX, 0, newZ + 10)
+
+    meshRef.current.rotation.y += delta * 2
+  })
+
+  return (
+    <>
+      {/* Player mesh */}
+      <mesh ref={meshRef} position={[0, 0, 0]} castShadow>
+        <boxGeometry args={[0.8, 0.8, 0.8]} />
+        <meshStandardMaterial
+          color={isInvulnerable ? "#00FF00" : "blue"}
+          emissive={isInvulnerable ? "#004400" : "#000000"}
+          emissiveIntensity={isInvulnerable ? 0.3 : 0}
+        />
+      </mesh>
+
+      {/* Spotlight */}
+      <spotLight
+        ref={spotLightRef}
+        position={[0, 5, 0]}
+        angle={-Math.PI / 3}
+        penumbra={0.25}
+        intensity={45}
+        distance={90}
+        color="#ffffff"
+        castShadow
+      />
+
+      {/* Invulnerability ring */}
+      {isInvulnerable && (
+        <mesh position={[meshRef.current?.position.x || 0, 6, meshRef.current?.position.z || 0]}>
+          <ringGeometry args={[1.5, 2, 16]} />
+          <meshStandardMaterial color="#00FF00" emissive="#00FF00" emissiveIntensity={0.5} transparent opacity={0.7} />
+        </mesh>
+      )}
+
+      {/* Terrain */}
+      <Terrain ref={terrainRef} terrainSegments={terrainSegments} tunnelLights={tunnelLights} wallImages={wallImages} />
+
+      {/* Obstacles and Mates */}
+      <Obstacles obstacles={obstacles} mates={mates} onCollectMate={collectMate} />
+    </>
+  )
+}
