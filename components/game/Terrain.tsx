@@ -3,6 +3,7 @@
 import { forwardRef } from "react"
 import type { Group } from "three"
 import * as THREE from "three"
+import { useTexture } from "@react-three/drei"
 import { GAME_CONFIG } from "./config"
 
 interface TerrainSegment {
@@ -27,6 +28,24 @@ interface TerrainProps {
 }
 
 const Terrain = forwardRef<Group, TerrainProps>(({ terrainSegments, tunnelLights, wallImages }, ref) => {
+  // Cargar la textura del piso una vez
+  const floorTexture = useTexture("/textures/terrain/textura_piso.png")
+  floorTexture.wrapS = THREE.RepeatWrapping
+  floorTexture.wrapT = THREE.RepeatWrapping
+  floorTexture.repeat.set(8, 4) // Más repeticiones para tiles más pequeños
+
+  // Cargar la textura de la pared una vez
+  const wallTexture = useTexture("/textures/terrain/textura_pared.png")
+  wallTexture.wrapS = THREE.ClampToEdgeWrapping
+  wallTexture.wrapT = THREE.ClampToEdgeWrapping
+  wallTexture.repeat.set(1, 1)
+
+  // Cargar la textura del techo una vez
+  const roofTexture = useTexture("/textures/terrain/textura_techo.png")
+  roofTexture.wrapS = THREE.RepeatWrapping
+  roofTexture.wrapT = THREE.RepeatWrapping
+  roofTexture.repeat.set(8, 4) // Igual que el piso para consistencia // Ajuste para paredes verticales
+
   return (
     <group ref={ref}>
       {/* Floor segments */}
@@ -34,15 +53,7 @@ const Terrain = forwardRef<Group, TerrainProps>(({ terrainSegments, tunnelLights
         <mesh key={segment.id} position={[0, -1, segment.z]} receiveShadow>
           <boxGeometry args={[20, 0.2, GAME_CONFIG.terrain.segmentSize]} />
           <meshStandardMaterial
-            map={(() => {
-              // Cargar la textura del piso desde public/textures/terrain/textura_piso.png
-              const loader = new THREE.TextureLoader()
-              const texture = loader.load("/textures/terrain/textura_piso.png")
-              texture.wrapS = THREE.RepeatWrapping
-              texture.wrapT = THREE.RepeatWrapping
-              texture.repeat.set(4, 2)
-              return texture
-            })()}
+            map={floorTexture}
             roughness={0.8}
             metalness={0.1}
           />
@@ -54,11 +65,19 @@ const Terrain = forwardRef<Group, TerrainProps>(({ terrainSegments, tunnelLights
         <group key={`walls-${segment.id}`}>
           <mesh position={[-10, 4, segment.z]} receiveShadow>
             <boxGeometry args={[0.5, 10, GAME_CONFIG.terrain.segmentSize]} />
-            <meshStandardMaterial color="#F5F5DC" roughness={0.7} metalness={0.0} />
+            <meshStandardMaterial
+              map={wallTexture}
+              roughness={0.7}
+              metalness={0.0}
+            />
           </mesh>
           <mesh position={[10, 4, segment.z]} receiveShadow>
             <boxGeometry args={[0.5, 10, GAME_CONFIG.terrain.segmentSize]} />
-            <meshStandardMaterial color="#F5F5DC" roughness={0.7} metalness={0.0} />
+            <meshStandardMaterial
+              map={wallTexture}
+              roughness={0.7}
+              metalness={0.0}
+            />
           </mesh>
         </group>
       ))}
@@ -100,29 +119,17 @@ const Terrain = forwardRef<Group, TerrainProps>(({ terrainSegments, tunnelLights
         )
       })}
 
-      {/* Floor lines */}
-      {terrainSegments.map((segment) => (
-        <group key={`floor-lines-${segment.id}`}>
-          <mesh position={[0, -0.89, segment.z]}>
-            <boxGeometry args={[0.1, 0.02, GAME_CONFIG.terrain.segmentSize]} />
-            <meshStandardMaterial color="#444444" />
-          </mesh>
-          <mesh position={[-6, -0.89, segment.z]}>
-            <boxGeometry args={[0.1, 0.02, GAME_CONFIG.terrain.segmentSize]} />
-            <meshStandardMaterial color="#444444" />
-          </mesh>
-          <mesh position={[6, -0.89, segment.z]}>
-            <boxGeometry args={[0.1, 0.02, GAME_CONFIG.terrain.segmentSize]} />
-            <meshStandardMaterial color="#444444" />
-          </mesh>
-        </group>
-      ))}
+
 
       {/* Roof */}
       {terrainSegments.map((segment) => (
         <mesh key={`roof-${segment.id}`} position={[0, 9, segment.z]}>
           <boxGeometry args={[20, 0.5, GAME_CONFIG.terrain.segmentSize]} />
-          <meshStandardMaterial color="#F5F5DC" />
+          <meshStandardMaterial
+            map={roofTexture}
+            roughness={0.8}
+            metalness={0.1}
+          />
         </mesh>
       ))}
 
@@ -158,23 +165,7 @@ const Terrain = forwardRef<Group, TerrainProps>(({ terrainSegments, tunnelLights
         </mesh>
       ))}
 
-      {/* Lane markers */}
-      {[GAME_CONFIG.lanes.left, GAME_CONFIG.lanes.center, GAME_CONFIG.lanes.right].map((laneX, index) => (
-        <group key={`lane-${index}`} position={[laneX, 0, 0]}>
-          <mesh position={[0, 0.1, 10]}>
-            <boxGeometry args={[0.2, 0.1, 20]} />
-            <meshStandardMaterial color="yellow" />
-          </mesh>
-          <mesh position={[0, 0.1, 30]}>
-            <boxGeometry args={[0.2, 0.1, 20]} />
-            <meshStandardMaterial color="yellow" />
-          </mesh>
-          <mesh position={[0, 0.1, 50]}>
-            <boxGeometry args={[0.2, 0.1, 20]} />
-            <meshStandardMaterial color="yellow" />
-          </mesh>
-        </group>
-      ))}
+
     </group>
   )
 })

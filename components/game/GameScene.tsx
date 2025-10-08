@@ -65,11 +65,11 @@ export default function GameScene() {
       <Canvas camera={{ position: [0, 5, -10], fov: 75 }} className="w-full h-full" shadows>
         <Suspense fallback={null}>
           {/* Lighting */}
-          <ambientLight intensity={1.2} />
+          <ambientLight intensity={0.4} />
           <directionalLight
             position={[10, 10, 5]}
-            intensity={0}
-            color="#4444ff"
+            intensity={1.0}
+            color="#ffffff"
             castShadow
             shadow-mapSize-width={1024}
             shadow-mapSize-height={1024}
