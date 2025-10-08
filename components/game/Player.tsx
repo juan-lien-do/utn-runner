@@ -127,20 +127,22 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
       }, 1000)
 
       switch (event.key) {
-        case "ArrowRight":
-          if (currentLane === "center") {
-            setCurrentLane("left")
-            setTargetX(GAME_CONFIG.lanes.left)
-          } else if (currentLane === "right") {
-            setCurrentLane("center")
-            setTargetX(GAME_CONFIG.lanes.center)
-          }
-          break
+        // ArrowRight should move to the right lane (increasing X)
         case "ArrowLeft":
           if (currentLane === "center") {
             setCurrentLane("right")
             setTargetX(GAME_CONFIG.lanes.right)
           } else if (currentLane === "left") {
+            setCurrentLane("center")
+            setTargetX(GAME_CONFIG.lanes.center)
+          }
+          break
+        // ArrowLeft should move to the left lane (decreasing X)
+        case "ArrowRight":
+          if (currentLane === "center") {
+            setCurrentLane("left")
+            setTargetX(GAME_CONFIG.lanes.left)
+          } else if (currentLane === "right") {
             setCurrentLane("center")
             setTargetX(GAME_CONFIG.lanes.center)
           }

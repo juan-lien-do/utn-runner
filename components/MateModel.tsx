@@ -3,7 +3,7 @@ import { useRef } from "react"
 import { useFrame } from "@react-three/fiber"
 import { useGLTF } from "@react-three/drei"
 import type { Group } from "three"
-import { GAME_CONFIG } from "./GameScene"
+import { GAME_CONFIG } from "@/components/game/config"
 
 interface MateModelProps {
   position: [number, number, number]

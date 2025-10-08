@@ -5,6 +5,7 @@ import Player from "./Player"
 import UIOverlay from "./UIOverlay"
 import { Suspense, useState, useEffect } from "react"
 import { GAME_CONFIG, updateGameDifficulty } from "./config"
+import HandCameraImpl from "../vision/HandCameraImpl"
 
 export default function GameScene() {
   const [isGameOver, setIsGameOver] = useState(false)
@@ -77,6 +78,19 @@ export default function GameScene() {
         finalScore={finalScore}
         onRestart={handleRestart}
       />
+      {/* Área de la cámara - ocupa 1/3 de la pantalla */}
+      <div className="h-1/3 p-4 bg-gray-800">
+        <div className="w-full h-full rounded-lg overflow-hidden">
+          <HandCameraImpl 
+            onHandDetected={(data) => {
+              console.log('Detección de mano:', data);
+            }}
+            width={640}
+            height={240}
+          />
+        </div>
+      </div>
     </div>
+    
   )
 }

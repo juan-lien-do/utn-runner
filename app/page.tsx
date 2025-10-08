@@ -1,5 +1,5 @@
 import GameScene from "@/components/game/GameScene"
-import HandCamera from "@/components/vision/HandCamera"
+import CameraPanel from "@/components/vision/CameraPanel"
 import { HandControlProvider } from "@/components/vision/HandControlContext"
 
 export default function Home() {
@@ -17,7 +17,7 @@ export default function Home() {
 
         {/* Camera section - 1/3 of screen */}
         <div className="w-full h-1/3 p-4 bg-gray-950">
-          <HandCamera />
+          <CameraPanel />
         </div>
       </div>
     </HandControlProvider>

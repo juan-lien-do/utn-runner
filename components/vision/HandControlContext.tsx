@@ -9,7 +9,7 @@ interface HandControlContextType {
   setJump: (jump: boolean) => void
 }
 
-const HandControlContext = createContext<HandControlContextType | undefined>(undefined)
+export const HandControlContext = createContext<HandControlContextType | undefined>(undefined)
 
 export function HandControlProvider({ children }: { children: ReactNode }) {
   const [lane, setLane] = useState<"left" | "center" | "right" | null>(null)
