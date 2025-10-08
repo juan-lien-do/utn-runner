@@ -2,13 +2,14 @@
 
 import { useRef, useEffect, useState } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
-import type { Mesh, Group, SpotLight } from "three"
+import type { Group, SpotLight } from "three"
 import * as THREE from "three"
 import { GAME_CONFIG } from "./config"
 import Terrain from "./Terrain"
 import Obstacles from "./Obstacles"
 import { useHandControlContext } from "../vision/HandControlContext"
 import { gameTimeManager } from "./GameTimeManager"
+import CharacterModel from "../CharacterModel"
 
 type Lane = "left" | "center" | "right"
 
@@ -49,7 +50,7 @@ interface PlayerProps {
 }
 
 export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate }: PlayerProps) {
-  const meshRef = useRef<Mesh>(null)
+  const meshRef = useRef<Group>(null)
   const terrainRef = useRef<Group>(null)
   const { camera } = useThree()
 
@@ -426,7 +427,7 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
     camera.lookAt(newX, 0, newZ + 10)
 
     // Player rotation using processed delta for consistency
-    meshRef.current.rotation.y += processedDelta * 2 * 60 // Normalize to 60fps equivalent
+    //meshRef.current.rotation.y += processedDelta * 2 * 60 // Normalize to 60fps equivalent
   })
 
   // Reset game time when component unmounts or game restarts
@@ -445,15 +446,12 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
 
   return (
     <>
-      {/* Player mesh */}
-      <mesh ref={meshRef} position={[0, 0, 0]} castShadow>
-        <boxGeometry args={[0.8, 0.8, 0.8]} />
-        <meshStandardMaterial
-          color={isInvulnerable ? "#00FF00" : "blue"}
-          emissive={isInvulnerable ? "#004400" : "#000000"}
-          emissiveIntensity={isInvulnerable ? 0.3 : 0}
-        />
-      </mesh>
+      {/* Player Character Model */}
+      <CharacterModel 
+        ref={meshRef}
+        position={[0, 0, 0]}
+        isInvulnerable={isInvulnerable}
+      />
 
       {/* Spotlight */}
       <spotLight
