@@ -6,6 +6,8 @@ import UIOverlay from "./UIOverlay"
 import { Suspense, useState, useEffect } from "react"
 import { GAME_CONFIG, updateGameDifficulty } from "./config"
 import HandCameraImpl from "../vision/HandCameraImpl"
+import { gameTimeManager } from "./GameTimeManager"
+import { GameTimeDebug } from "./GameTimeDebug"
 
 export default function GameScene() {
   const [isGameOver, setIsGameOver] = useState(false)
@@ -30,17 +32,29 @@ export default function GameScene() {
   }
 
   const handleRestart = () => {
+    // Reset game time manager
+    gameTimeManager.reset()
+    
+    // Reset game state
     setIsGameOver(false)
     setScore(0)
     setFinalScore(0)
     setIsPaused(false)
+    
+    // Reset game config to initial values
     GAME_CONFIG.playerSpeed = 0.3
     GAME_CONFIG.jump.duration = 0.9
     GAME_CONFIG.obstacles.spawnInterval = 1.0
+    
+    // Force reload to ensure clean state
     window.location.reload()
   }
 
   useEffect(() => {
+    // Sync pause state with game time manager
+    gameTimeManager.setPaused(isPaused || isGameOver)
+    
+    // Update difficulty based on score
     if (!isGameOver && !isPaused) {
       updateGameDifficulty(score)
     }
@@ -78,6 +92,9 @@ export default function GameScene() {
         finalScore={finalScore}
         onRestart={handleRestart}
       />
+
+      {/* Debug panel - set visible={true} to enable */}
+      <GameTimeDebug visible={false} />
       {/* Área de la cámara - ocupa 1/3 de la pantalla */}
       <div className="h-1/3 p-4 bg-gray-800">
         <div className="w-full h-full rounded-lg overflow-hidden">

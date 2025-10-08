@@ -8,6 +8,7 @@ import { GAME_CONFIG } from "./config"
 import Terrain from "./Terrain"
 import Obstacles from "./Obstacles"
 import { useHandControlContext } from "../vision/HandControlContext"
+import { gameTimeManager } from "./GameTimeManager"
 
 type Lane = "left" | "center" | "right"
 
@@ -66,13 +67,11 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
 
   const [isInvulnerable, setIsInvulnerable] = useState(false)
   const [invulnerabilityEndTime, setInvulnerabilityEndTime] = useState(0)
-  const [pausedInvulnerabilityTime, setPausedInvulnerabilityTime] = useState(0)
 
   const [isJumping, setIsJumping] = useState(false)
   const [jumpStartTime, setJumpStartTime] = useState(0)
   const [currentY, setCurrentY] = useState(0)
 
-  const [gameStartTime] = useState(Date.now())
   const [totalDistance, setTotalDistance] = useState(0)
   const spotLightRef = useRef<SpotLight>(null)
 
@@ -111,7 +110,7 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
 
   const { lane: handLane, jump: handJump } = useHandControlContext()
   const [keyboardActive, setKeyboardActive] = useState(false)
-  const keyboardTimeoutRef = useRef<NodeJS.Timeout>()
+  const keyboardTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Handle keyboard input
   useEffect(() => {
@@ -150,7 +149,7 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
         case "ArrowUp":
           if (!isJumping) {
             setIsJumping(true)
-            setJumpStartTime(Date.now())
+            setJumpStartTime(gameTimeManager.getGameTime())
           }
           break
       }
@@ -180,43 +179,22 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
 
     if (handJump && !isJumping) {
       setIsJumping(true)
-      setJumpStartTime(Date.now())
+      setJumpStartTime(gameTimeManager.getGameTime())
     }
   }, [handJump, isJumping, isGameOver, isPaused, keyboardActive])
 
   useEffect(() => {
     if (isGameOver || isPaused) return
 
-    const timeElapsed = (Date.now() - gameStartTime) / 1000
+    const timeElapsed = gameTimeManager.getGameTime()
     const timeScore = timeElapsed * GAME_CONFIG.scoring.pointsPerSecond
     const distanceScore = totalDistance * GAME_CONFIG.scoring.distanceMultiplier
     const currentScore = timeScore + distanceScore
 
     onScoreUpdate(currentScore)
-  }, [totalDistance, isGameOver, isPaused, gameStartTime, onScoreUpdate])
+  }, [totalDistance, isGameOver, isPaused, onScoreUpdate])
 
-  useEffect(() => {
-    if (isGameOver || isPaused) return
-
-    const checkInvulnerability = () => {
-      if (isInvulnerable && Date.now() >= invulnerabilityEndTime) {
-        setIsInvulnerable(false)
-        setInvulnerabilityEndTime(0)
-      }
-    }
-
-    const interval = setInterval(checkInvulnerability, 100)
-    return () => clearInterval(interval)
-  }, [isInvulnerable, invulnerabilityEndTime, isGameOver, isPaused])
-
-  useEffect(() => {
-    if (isPaused && isInvulnerable) {
-      setPausedInvulnerabilityTime(invulnerabilityEndTime - Date.now())
-    } else if (!isPaused && isInvulnerable && pausedInvulnerabilityTime > 0) {
-      setInvulnerabilityEndTime(Date.now() + pausedInvulnerabilityTime)
-      setPausedInvulnerabilityTime(0)
-    }
-  }, [isPaused, isInvulnerable, invulnerabilityEndTime, pausedInvulnerabilityTime])
+  // Invulnerability will be checked in the main game loop using gameTime
 
   const checkCollisions = (playerX: number, playerY: number, playerZ: number) => {
     const playerBox = new THREE.Box3().setFromCenterAndSize(
@@ -256,8 +234,9 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
     setMates((prev) => prev.filter((mate) => mate.id !== mateId))
 
     setIsInvulnerable(true)
-    setInvulnerabilityEndTime(Date.now() + GAME_CONFIG.mate.invulnerabilityDuration)
-    setPausedInvulnerabilityTime(0)
+    // Convert milliseconds to seconds for gameTime
+    const invulnerabilityDurationInSeconds = GAME_CONFIG.mate.invulnerabilityDuration / 1000
+    setInvulnerabilityEndTime(gameTimeManager.getGameTime() + invulnerabilityDurationInSeconds)
   }
 
   const spawnObstacle = (currentZ: number) => {
@@ -345,9 +324,19 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
   }
 
   useFrame((state, delta) => {
-    if (!meshRef.current || isGameOver || isPaused) return
+    if (!meshRef.current || isGameOver) return
 
-    const newZ = positionZ + GAME_CONFIG.playerSpeed
+    // Update game time manager with current delta
+    gameTimeManager.setPaused(isPaused)
+    if (!isPaused) {
+      gameTimeManager.updateTime(delta)
+    }
+
+    if (isPaused) return
+
+    // Movement based on delta time (consistent with game time)
+    const movementSpeed = GAME_CONFIG.playerSpeed * delta * 60 // Normalize to 60fps equivalent
+    const newZ = positionZ + movementSpeed
     setPositionZ(newZ)
     setTotalDistance(newZ)
     meshRef.current.position.z = newZ
@@ -355,61 +344,86 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
     updateTerrain(newZ)
     updateTunnelLights(newZ)
 
+    // Lane switching (still frame-rate dependent for smooth interpolation)
     const currentX = meshRef.current.position.x
     const lerpSpeed = 8 * delta
     const newX = currentX + (targetX - currentX) * lerpSpeed
     meshRef.current.position.x = newX
 
+    // Jump animation using game time
     if (isJumping) {
-      const elapsed = (Date.now() - jumpStartTime) / 1000
-      const progress = elapsed / GAME_CONFIG.jump.duration
+      const jumpProgress = gameTimeManager.getEventProgress(jumpStartTime, GAME_CONFIG.jump.duration)
 
-      if (progress >= 1) {
+      if (gameTimeManager.isEventComplete(jumpStartTime, GAME_CONFIG.jump.duration)) {
         setIsJumping(false)
         setCurrentY(0)
         meshRef.current.position.y = 0
       } else {
-        const jumpY = Math.sin(progress * Math.PI) * GAME_CONFIG.jump.height
+        const jumpY = Math.sin(jumpProgress * Math.PI) * GAME_CONFIG.jump.height
         setCurrentY(jumpY)
         meshRef.current.position.y = jumpY
       }
     }
 
-    const currentTime = Date.now() / 1000
+    // Check invulnerability using game time
+    if (isInvulnerable && gameTimeManager.getGameTime() >= invulnerabilityEndTime) {
+      setIsInvulnerable(false)
+      setInvulnerabilityEndTime(0)
+    }
 
+    // Lighting
     if (spotLightRef.current) {
       spotLightRef.current.position.set(newX, 5, newZ - 5)
       spotLightRef.current.target.position.set(newX, 0, newZ + 10)
       spotLightRef.current.target.updateMatrixWorld()
     }
 
-    if (currentTime - lastObstacleSpawn > GAME_CONFIG.obstacles.spawnInterval) {
+    // Obstacle spawning using game time
+    if (gameTimeManager.hasTimeElapsed(lastObstacleSpawn, GAME_CONFIG.obstacles.spawnInterval)) {
       spawnObstacle(newZ)
-      setLastObstacleSpawn(currentTime)
+      setLastObstacleSpawn(gameTimeManager.getGameTime())
     }
 
-    if (currentTime - lastWallImageSpawn > 3.5) {
+    // Wall image spawning using game time
+    if (gameTimeManager.hasTimeElapsed(lastWallImageSpawn, 3.5)) {
       spawnWallImage(newZ)
-      setLastWallImageSpawn(currentTime)
+      setLastWallImageSpawn(gameTimeManager.getGameTime())
     }
 
+    // Cleanup old objects
     setObstacles((prev) => prev.filter((obstacle) => obstacle.z > newZ - 20))
     setMates((prev) => prev.filter((mate) => mate.z > newZ - 20))
     setWallImages((prev) => prev.filter((image) => image.z > newZ - 20))
 
+    // Collision detection
     if (checkCollisions(newX, currentY, newZ)) {
       onGameOver()
       return
     }
 
+    // Camera following
     camera.position.x = newX
     camera.position.y = 5
     camera.position.z = newZ - 10
-
     camera.lookAt(newX, 0, newZ + 10)
 
+    // Player rotation (still frame-dependent for smooth animation)
     meshRef.current.rotation.y += delta * 2
   })
+
+  // Reset game time when component unmounts or game restarts
+  useEffect(() => {
+    return () => {
+      gameTimeManager.reset()
+    }
+  }, [])
+
+  // Reset game time when game restarts (when isGameOver changes from true to false)
+  useEffect(() => {
+    if (!isGameOver && positionZ === 0) {
+      gameTimeManager.reset()
+    }
+  }, [isGameOver, positionZ])
 
   return (
     <>
