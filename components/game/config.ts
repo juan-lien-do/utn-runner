@@ -1,5 +1,5 @@
 export const GAME_CONFIG = {
-  playerSpeed: 0.3, // Will scale from 0.3 to 1.0
+  playerSpeed: 0.15, // Will scale from 0.3 to 1.0
   laneOffset: 4,
   lanes: {
     left: -4,
