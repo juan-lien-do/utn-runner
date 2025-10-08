@@ -1,4 +1,5 @@
 // Game Time Manager - Centralized time system for consistent game timing
+import { gameLog } from '../../lib/console-cleaner';
 
 class GameTimeManager {
   private static instance: GameTimeManager;
@@ -58,7 +59,7 @@ class GameTimeManager {
     
     if (isExtremeFrame) {
       this.extremeFrameCount++;
-      console.warn(`[GameTime] Extreme frame detected: ${(rawDeltaTime * 1000).toFixed(1)}ms - skipping physics`);
+      gameLog.warn(`Extreme frame detected: ${(rawDeltaTime * 1000).toFixed(1)}ms - skipping physics`);
       
       // Don't update game time for extreme frames to prevent jumps
       return { 
@@ -87,7 +88,7 @@ class GameTimeManager {
     // Detect freeze recovery
     if (isRecoveringFromFreeze) {
       this.freezeDetectedCount++;
-      console.log(`[GameTime] Freeze recovery: raw=${(rawDeltaTime * 1000).toFixed(1)}ms, smoothed=${(this.smoothedDelta * 1000).toFixed(1)}ms`);
+      gameLog.info(`Freeze recovery: raw=${(rawDeltaTime * 1000).toFixed(1)}ms, smoothed=${(this.smoothedDelta * 1000).toFixed(1)}ms`);
     }
     
     // Update FPS tracking for debugging
@@ -99,7 +100,7 @@ class GameTimeManager {
       
       // Log performance stats
       if (this.freezeDetectedCount > 0 || this.extremeFrameCount > 0) {
-        console.log(`[GameTime] Performance: FPS=${this.currentFPS}, freezes=${this.freezeDetectedCount}, extreme=${this.extremeFrameCount}`);
+        gameLog.debug(`Performance: FPS=${this.currentFPS}, freezes=${this.freezeDetectedCount}, extreme=${this.extremeFrameCount}`);
         this.freezeDetectedCount = 0;
         this.extremeFrameCount = 0;
       }
@@ -109,7 +110,7 @@ class GameTimeManager {
       
       // Log if FPS is significantly low
       if (this.currentFPS < 30) {
-        console.log(`[GameTime] Low FPS detected: ${this.currentFPS}, smoothed delta: ${(this.smoothedDelta * 1000).toFixed(1)}ms`);
+        gameLog.debug(`Low FPS detected: ${this.currentFPS}, smoothed delta: ${(this.smoothedDelta * 1000).toFixed(1)}ms`);
       }
     }
     
@@ -173,7 +174,7 @@ class GameTimeManager {
     this.freezeDetectedCount = 0;
     this.extremeFrameCount = 0;
     
-    console.log('[GameTime] Game time reset with smoothing system');
+    gameLog.info('Game time reset with smoothing system');
   }
 
   /**
