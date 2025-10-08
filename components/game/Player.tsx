@@ -326,31 +326,42 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
   useFrame((state, delta) => {
     if (!meshRef.current || isGameOver) return
 
-    // Update game time manager with current delta
+    // Update game time manager and get processed delta
     gameTimeManager.setPaused(isPaused)
-    if (!isPaused) {
-      gameTimeManager.updateTime(delta)
-    }
-
+    
     if (isPaused) return
 
-    // Movement based on delta time (consistent with game time)
-    const movementSpeed = GAME_CONFIG.playerSpeed * delta * 60 // Normalize to 60fps equivalent
+    const timeResult = gameTimeManager.updateTime(delta)
+    const { processedDelta, shouldSkipPhysics, isRecoveringFromFreeze } = timeResult
+
+    // Skip physics during extreme frames to prevent jumps
+    if (shouldSkipPhysics) {
+      console.log('[Player] Skipping physics due to extreme frame')
+      return
+    }
+
+    // Use processed delta for all calculations
+    const currentX = meshRef.current.position.x
+
+    // Movement based on smoothed delta time
+    const movementSpeed = GAME_CONFIG.playerSpeed * processedDelta * 60 // Normalize to 60fps equivalent
     const newZ = positionZ + movementSpeed
     setPositionZ(newZ)
     setTotalDistance(newZ)
     meshRef.current.position.z = newZ
 
+    // Update world elements
     updateTerrain(newZ)
     updateTunnelLights(newZ)
 
-    // Lane switching (still frame-rate dependent for smooth interpolation)
-    const currentX = meshRef.current.position.x
-    const lerpSpeed = 8 * delta
+    // Lane switching - use original delta for smooth visual interpolation
+    // but limit it to prevent jumps during freeze recovery
+    const safeDelta = isRecoveringFromFreeze ? Math.min(delta, 1/30) : delta
+    const lerpSpeed = 8 * safeDelta
     const newX = currentX + (targetX - currentX) * lerpSpeed
     meshRef.current.position.x = newX
 
-    // Jump animation using game time
+    // Jump animation using game time (frame-independent)
     if (isJumping) {
       const jumpProgress = gameTimeManager.getEventProgress(jumpStartTime, GAME_CONFIG.jump.duration)
 
@@ -371,20 +382,20 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
       setInvulnerabilityEndTime(0)
     }
 
-    // Lighting
+    // Lighting follows player smoothly
     if (spotLightRef.current) {
       spotLightRef.current.position.set(newX, 5, newZ - 5)
       spotLightRef.current.target.position.set(newX, 0, newZ + 10)
       spotLightRef.current.target.updateMatrixWorld()
     }
 
-    // Obstacle spawning using game time
+    // Obstacle spawning using game time (frame-independent)
     if (gameTimeManager.hasTimeElapsed(lastObstacleSpawn, GAME_CONFIG.obstacles.spawnInterval)) {
       spawnObstacle(newZ)
       setLastObstacleSpawn(gameTimeManager.getGameTime())
     }
 
-    // Wall image spawning using game time
+    // Wall image spawning using game time (frame-independent)
     if (gameTimeManager.hasTimeElapsed(lastWallImageSpawn, 3.5)) {
       spawnWallImage(newZ)
       setLastWallImageSpawn(gameTimeManager.getGameTime())
@@ -395,8 +406,8 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
     setMates((prev) => prev.filter((mate) => mate.z > newZ - 20))
     setWallImages((prev) => prev.filter((image) => image.z > newZ - 20))
 
-    // Collision detection
-    if (checkCollisions(newX, currentY, newZ)) {
+    // Collision detection (skip during freeze recovery to prevent false positives)
+    if (!isRecoveringFromFreeze && checkCollisions(newX, currentY, newZ)) {
       onGameOver()
       return
     }
@@ -407,8 +418,8 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
     camera.position.z = newZ - 10
     camera.lookAt(newX, 0, newZ + 10)
 
-    // Player rotation (still frame-dependent for smooth animation)
-    meshRef.current.rotation.y += delta * 2
+    // Player rotation using processed delta for consistency
+    meshRef.current.rotation.y += processedDelta * 2 * 60 // Normalize to 60fps equivalent
   })
 
   // Reset game time when component unmounts or game restarts

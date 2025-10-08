@@ -10,18 +10,25 @@ export const GameTimeDebug: React.FC<GameTimeDebugProps> = ({ visible = false })
     gameTime: 0,
     fps: 60,
     avgFPS: 60,
-    isPaused: false
+    isPaused: false,
+    smoothedDeltaMs: 16.67,
+    maxDeltaMs: 50,
+    isStable: true
   });
 
   useEffect(() => {
     if (!visible) return;
 
     const interval = setInterval(() => {
+      const perfStats = gameTimeManager.getPerformanceStats();
       setDebugInfo({
         gameTime: gameTimeManager.getGameTime(),
-        fps: gameTimeManager.getCurrentFPS(),
-        avgFPS: gameTimeManager.getAverageFPS(),
-        isPaused: gameTimeManager.isPausedState()
+        fps: perfStats.currentFPS,
+        avgFPS: perfStats.averageFPS,
+        isPaused: gameTimeManager.isPausedState(),
+        smoothedDeltaMs: perfStats.smoothedDeltaMs,
+        maxDeltaMs: perfStats.maxDeltaMs,
+        isStable: perfStats.isStable
       });
     }, 100);
 
@@ -36,9 +43,12 @@ export const GameTimeDebug: React.FC<GameTimeDebugProps> = ({ visible = false })
       <div>Game Time: {debugInfo.gameTime.toFixed(2)}s</div>
       <div>Current FPS: {debugInfo.fps}</div>
       <div>Avg FPS: {debugInfo.avgFPS.toFixed(1)}</div>
-      <div>Status: {debugInfo.isPaused ? 'PAUSED' : 'RUNNING'}</div>
+      <div>Delta: {debugInfo.smoothedDeltaMs.toFixed(1)}ms</div>
+      <div>Max Delta: {debugInfo.maxDeltaMs.toFixed(0)}ms</div>
+      <div>Status: {debugInfo.isPaused ? 'PAUSED' : debugInfo.isStable ? 'STABLE' : 'UNSTABLE'}</div>
       <div className="text-yellow-400 text-xs mt-2">
         {debugInfo.fps < 30 && !debugInfo.isPaused && 'SLOW MOTION MODE'}
+        {!debugInfo.isStable && !debugInfo.isPaused && 'SMOOTHING ACTIVE'}
       </div>
     </div>
   );
