@@ -281,8 +281,9 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
       const minZ = playerZ - GAME_CONFIG.terrain.segmentsBehind * GAME_CONFIG.terrain.segmentSize
       const maxZ = playerZ + GAME_CONFIG.terrain.segmentsAhead * GAME_CONFIG.terrain.segmentSize
 
+      // More aggressive cleanup: remove segments that are far behind
       const filteredSegments = updatedSegments.filter(
-        (segment) => segment.z >= minZ - GAME_CONFIG.terrain.recycleDistance,
+        (segment) => segment.z >= minZ - GAME_CONFIG.terrain.segmentSize * 2
       )
 
       const existingZPositions = new Set(filteredSegments.map((s) => s.z))
@@ -304,22 +305,28 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
 
   const updateTunnelLights = (playerZ: number) => {
     setTunnelLights((prevLights) => {
-      const updatedLights: TunnelLight[] = []
-
       const minZ = playerZ - GAME_CONFIG.terrain.segmentsBehind * GAME_CONFIG.terrain.segmentSize
       const maxZ = playerZ + GAME_CONFIG.terrain.segmentsAhead * GAME_CONFIG.terrain.segmentSize
 
+      // More aggressive cleanup: remove lights that are far behind
+      const filteredLights = prevLights.filter(
+        (light) => light.z >= minZ - GAME_CONFIG.terrain.segmentSize * 2
+      )
+
+      const existingZPositions = new Set(filteredLights.map((l) => l.z))
+
+      // Only add new lights that don't exist
       for (let z = minZ; z <= maxZ; z += GAME_CONFIG.terrain.segmentSize) {
-        const segmentIndex = Math.round(z / GAME_CONFIG.terrain.segmentSize)
-        if (segmentIndex % 3 === 0) {
-          updatedLights.push({
+        const roundedZ = Math.round(z / GAME_CONFIG.terrain.segmentSize) * GAME_CONFIG.terrain.segmentSize
+        if (roundedZ % 60 === 0 && !existingZPositions.has(roundedZ)) { // Every 3 segments (60 units)
+          filteredLights.push({
             id: lightIdCounter.current++,
-            z: Math.round(z / GAME_CONFIG.terrain.segmentSize) * GAME_CONFIG.terrain.segmentSize,
+            z: roundedZ,
           })
         }
       }
 
-      return updatedLights
+      return filteredLights.sort((a, b) => a.z - b.z)
     })
   }
 
@@ -469,7 +476,7 @@ export default function Player({ onGameOver, isGameOver, isPaused, onScoreUpdate
       )}
 
       {/* Terrain */}
-      <Terrain ref={terrainRef} terrainSegments={terrainSegments} tunnelLights={tunnelLights} wallImages={wallImages} />
+      <Terrain ref={terrainRef} terrainSegments={terrainSegments} tunnelLights={tunnelLights} wallImages={wallImages} playerZ={positionZ} />
 
       {/* Obstacles and Mates */}
       <Obstacles obstacles={obstacles} mates={mates} onCollectMate={collectMate} />

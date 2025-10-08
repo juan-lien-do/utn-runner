@@ -26,6 +26,7 @@ export const GAME_CONFIG = {
     segmentsAhead: 5,
     segmentsBehind: 2,
     recycleDistance: 40,
+    renderDistance: 200, // Distancia máxima para renderizar segmentos
   },
   scoring: {
     pointsPerSecond: 2,
