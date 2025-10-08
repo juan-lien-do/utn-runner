@@ -35,21 +35,9 @@ const Terrain = forwardRef<Group, TerrainProps>(({ terrainSegments, tunnelLights
           <boxGeometry args={[20, 0.2, GAME_CONFIG.terrain.segmentSize]} />
           <meshStandardMaterial
             map={(() => {
-              const canvas = document.createElement("canvas")
-              canvas.width = 64
-              canvas.height = 64
-              const ctx = canvas.getContext("2d")!
-
-              const tileSize = 8
-              for (let x = 0; x < canvas.width; x += tileSize) {
-                for (let y = 0; y < canvas.height; y += tileSize) {
-                  const isEven = (x / tileSize + y / tileSize) % 2 === 0
-                  ctx.fillStyle = isEven ? "#e8e8e8" : "#d0d0d0"
-                  ctx.fillRect(x, y, tileSize, tileSize)
-                }
-              }
-
-              const texture = new THREE.CanvasTexture(canvas)
+              // Cargar la textura del piso desde public/textures/terrain/textura_piso.png
+              const loader = new THREE.TextureLoader()
+              const texture = loader.load("/textures/terrain/textura_piso.png")
               texture.wrapS = THREE.RepeatWrapping
               texture.wrapT = THREE.RepeatWrapping
               texture.repeat.set(4, 2)

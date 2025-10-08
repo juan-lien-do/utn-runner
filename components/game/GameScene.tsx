@@ -94,7 +94,7 @@ export default function GameScene() {
       />
 
       {/* Debug panel - set visible={true} to enable */}
-      <GameTimeDebug visible={true} />
+      <GameTimeDebug visible={false} />
       {/* Área de la cámara - ocupa 1/3 de la pantalla */}
       <div className="h-1/3 p-4 bg-gray-800">
         <div className="w-full h-full rounded-lg overflow-hidden">
