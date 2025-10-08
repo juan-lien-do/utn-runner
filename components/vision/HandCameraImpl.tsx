@@ -16,7 +16,7 @@ interface Props {
 }
 
 // Performance constants
-const TARGET_FPS = 15;
+const TARGET_FPS = 12;
 const FRAME_INTERVAL = 1000 / TARGET_FPS;
 const LANE_DEBOUNCE_MS = 100;
 

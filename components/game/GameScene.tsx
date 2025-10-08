@@ -83,7 +83,7 @@ export default function GameScene() {
         <div className="w-full h-full rounded-lg overflow-hidden">
           <HandCameraImpl 
             onHandDetected={(data) => {
-              console.log('Detección de mano:', data);
+              //console.log('Detección de mano:', data);
             }}
             width={640}
             height={240}
